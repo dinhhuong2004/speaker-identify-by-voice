@@ -19,6 +19,18 @@ This project focuses on researching, experimenting, and training machine learnin
 - Hugging Face dataset (100 speakers):
 	https://huggingface.co/datasets/thucdangvan020999/speaker_identification_100_speakers_
 
+
+| Package | Dùng để |
+|---|---|
+| datasets | load HF dataset |
+| torchaudio | xử lý audio |
+| librosa | preprocess |
+| soundfile | đọc/ghi audio |
+| numpy | array |
+| scikit-learn | cosine similarity |
+| transformers | WavLM |
+| faiss-cpu | vector search |
+
 ## Pipeline
 ```text
 [DATA]
