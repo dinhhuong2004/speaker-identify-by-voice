@@ -1,6 +1,59 @@
+# =========================
+# Python
+# =========================
 .venv/
+venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# =========================
+# Data (IMPORTANT)
+# =========================
+data/
+data_processed/
 *.npy
+*.npz
 *.pkl
-# data/data_processed/
+*.csv
+*.parquet
+*.wav
+*.mp3
+
+# =========================
+# Models / Weights
+# =========================
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.bin
+
+# =========================
+# Logs / Outputs
+# =========================
+logs/
+*.log
+outputs/
+results/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# OS / Editor
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# =========================
+# Temp / Cache
+# =========================
+tmp/
+temp/
+.cache/
