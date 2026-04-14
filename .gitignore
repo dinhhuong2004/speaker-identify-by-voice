@@ -1,4 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
-# data/
+*.npy
+*.pkl
+# data/data_processed/
