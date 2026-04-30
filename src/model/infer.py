@@ -115,3 +115,28 @@ if __name__ == "__main__":
 
     print(f"\n🎤 Speaker ID: {pred}")
     print(f"📊 Similarity score: {score:.4f}")
+
+
+
+###🎯 Mục đích
+
+# Nhận diện speaker từ audio bằng:
+
+# WavLM → embedding
+# FAISS → tìm nearest speaker
+# ⚙️ Pipeline
+# Audio → Preprocess → WavLM → Embedding → FAISS → Speaker ID + Score
+# 🔧 Chức năng chính
+# preprocess_audio(path)
+# Load 16kHz, trim silence, normalize, cắt max 3s
+# extract_embedding(audio)
+# WavLM → mean pooling → normalize vector (768-dim)
+# predict(path, k=1)
+# Trả về:
+# speaker_id
+# similarity_score
+# 📦 Input / Output
+# Input: .wav
+# Output:
+# Speaker ID
+# Similarity score (cosine/IP)
