@@ -7,12 +7,18 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+dist/
+build/
+*.egg
 
 # =========================
 # Data (IMPORTANT)
 # =========================
 data/
+data_real/
 data_processed/
+data_spectrograms/
 *.npy
 *.npz
 *.pkl
@@ -20,15 +26,21 @@ data_processed/
 *.parquet
 *.wav
 *.mp3
+*.flac
+*.m4a
 
 # =========================
-# Models / Weights
+# Models / Weights / Embeddings
 # =========================
 *.pt
 *.pth
 *.ckpt
 *.onnx
 *.bin
+*.h5
+*.pb
+*.faiss
+*.index
 
 # =========================
 # Logs / Outputs
@@ -37,11 +49,14 @@ logs/
 *.log
 outputs/
 results/
+models/
 
 # =========================
 # Jupyter
 # =========================
 .ipynb_checkpoints/
+*.ipynb_checkpoints
+.jupyter/
 
 # =========================
 # OS / Editor
@@ -50,6 +65,24 @@ results/
 Thumbs.db
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# =========================
+# Streamlit
+# =========================
+.streamlit/
+streamlit_logs/
+
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.local
+.env.*.local
 
 # =========================
 # Temp / Cache
@@ -57,3 +90,5 @@ Thumbs.db
 tmp/
 temp/
 .cache/
+*.cache
+__pycache__/

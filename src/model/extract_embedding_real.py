@@ -1,3 +1,33 @@
+
+
+# Extract Audio Embeddings using Pre-trained Speech Models
+# This module provides functionality to extract high-dimensional embeddings from audio samples
+# using state-of-the-art pre-trained speech representation models from HuggingFace.
+# Main Features:
+#     - Support for multiple pre-trained models (WavLM, Wav2Vec2, HuBERT, UniSpeech-SAT)
+#     - Batch processing of audio files with progress tracking
+#     - GPU/CPU device support with automatic fallback
+#     - L2 normalization of embeddings for consistency
+#     - Flexible file I/O for loading and saving embeddings and labels
+# Core Functionality:
+#     1. Load training audio data and labels from .npy files
+#     2. Load pre-trained speech models from HuggingFace hub
+#     3. Extract normalized embeddings from audio samples
+#     4. Process all audios in batch with progress bar
+#     5. Save embeddings and labels to disk with model-specific naming
+# Usage:
+#     Command line with default WavLM model:
+#         python extract_embedding_real.py
+#     Using specific model:
+#         python extract_embedding_real.py --model wav2vec2
+#     List all available models:
+#         python extract_embedding_real.py --list-models
+# Configuration:
+#     - Models: WavLM, Wav2Vec2, HuBERT, UniSpeech-SAT (all 768-dim)
+#     - Target Sample Rate: 16000 Hz
+#     - Device: CUDA (if available) or CPU
+#     - Data paths and save paths are configurable
+
 import numpy as np
 import torch
 import os
@@ -40,6 +70,36 @@ SAVE_PATH = "D:\\Master DS\\Intro_to_DS\\data_processed"
 TARGET_SR = 16000
 
 # =========================
+# CHECK GPU
+# =========================
+def check_gpu():
+    """Check GPU availability and print device info"""
+    print("\n" + "="*60)
+    print("🖥️ GPU CONFIGURATION")
+    print("="*60)
+    
+    print(f"PyTorch version: {torch.__version__}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    
+    if torch.cuda.is_available():
+        print(f"CUDA version: {torch.version.cuda}")
+        print(f"Number of GPUs: {torch.cuda.device_count()}")
+        
+        for i in range(torch.cuda.device_count()):
+            gpu_name = torch.cuda.get_device_name(i)
+            gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+            print(f"\n  GPU {i}: {gpu_name}")
+            print(f"  Memory: {gpu_memory:.2f} GB")
+        
+        print(f"\n✅ Using GPU: {torch.cuda.get_device_name(0)}")
+        print(f"   Device: {DEVICE}")
+    else:
+        print(f"\n⚠️ GPU not available, using CPU")
+        print(f"   Device: {DEVICE}")
+    
+    print("="*60 + "\n")
+
+# =========================
 # LOAD DATA
 # =========================
 def load_data():
@@ -77,6 +137,10 @@ def load_model(model_key):
     
     print(f"   ✅ Loaded on {DEVICE}")
     
+    if torch.cuda.is_available():
+        gpu_memory_used = torch.cuda.memory_allocated() / 1024**3
+        print(f"   GPU Memory used: {gpu_memory_used:.2f} GB")
+    
     return feature_extractor, model, model_info['dim']
 
 # =========================
@@ -98,14 +162,14 @@ def extract_embedding(audio, feature_extractor, model):
             padding=True
         )
         
-        # Move to device
+        # Move to device (GPU/CPU) - L2 normalization sẽ được thực hiện sau khi lấy embedding
         inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
         
-        # Forward pass
+        # Forward pass không tính gradient để tiết kiệm bộ nhớ và tăng tốc độ trong inference mode 
         with torch.no_grad():
             outputs = model(**inputs)
         
-        # Get last hidden state and mean pool
+        # Get last hidden state and mean pool để có embedding cố định (768-dim)
         if hasattr(outputs, 'last_hidden_state'):
             emb = outputs.last_hidden_state.mean(dim=1)  # (1, D)
         else:
@@ -113,7 +177,7 @@ def extract_embedding(audio, feature_extractor, model):
         
         emb = emb.squeeze().cpu().numpy()  # (D,)
         
-        # L2 normalize
+        # L2 normalize embedding để đảm bảo consistency khi tính cosine similarity sau này
         norm = np.linalg.norm(emb)
         if norm > 0:
             emb = emb / norm
@@ -133,6 +197,7 @@ def extract_all_embeddings(train_audios, feature_extractor, model):
     embeddings = []
     
     for audio in tqdm(train_audios, desc="Extracting", unit="sample"):
+        # Extract embedding: L2 normalization được thực hiện trong hàm extract_embedding
         emb = extract_embedding(audio, feature_extractor, model)
         embeddings.append(emb)
     
@@ -192,6 +257,11 @@ def main():
         help=f'Model to use (default: wavlm)'
     )
     parser.add_argument(
+        '--all', 
+        action='store_true',
+        help='Extract embeddings using all available models'
+    )
+    parser.add_argument(
         '--list-models', 
         action='store_true',
         help='List all available models'
@@ -199,30 +269,70 @@ def main():
     
     args = parser.parse_args()
     
+    # Check GPU
+    check_gpu()
+    
     # Nếu user muốn xem danh sách model
     if args.list_models:
         print_available_models()
         return
     
-    print("="*60)
-    print(f"🎯 EXTRACT EMBEDDINGS - Model: {args.model.upper()}")
-    print("="*60)
-    
-    # Load data
+    # Load data once
     train_audios, train_labels = load_data()
     
-    # Load model
-    feature_extractor, model, _ = load_model(args.model)
-    
-    # Extract embeddings
-    embeddings = extract_all_embeddings(train_audios, feature_extractor, model)
-    
-    # Save
-    emb_file, label_file = save_embeddings(embeddings, train_labels, args.model)
-    
-    print("\n" + "="*60)
-    print("✅ EMBEDDING EXTRACTION DONE!")
-    print("="*60)
+    # Nếu user chọn --all, chạy tất cả models
+    if args.all:
+        print("="*60)
+        print(f"🎯 EXTRACT EMBEDDINGS - ALL MODELS ({len(MODELS)} models)")
+        print("="*60)
+        
+        for idx, model_key in enumerate(MODELS.keys(), 1):
+            print(f"\n\n{'='*60}")
+            print(f"[{idx}/{len(MODELS)}] Processing: {model_key.upper()}")
+            print(f"{'='*60}")
+            
+            try:
+                # Load model
+                feature_extractor, model, _ = load_model(model_key)
+                
+                # Extract embeddings
+                embeddings = extract_all_embeddings(train_audios, feature_extractor, model)
+                
+                # Save
+                save_embeddings(embeddings, train_labels, model_key)
+                
+                # Clear memory
+                del model, feature_extractor, embeddings
+                import gc
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                
+            except Exception as e:
+                print(f"❌ Error processing {model_key}: {e}")
+                continue
+        
+        print("\n" + "="*60)
+        print("✅ ALL MODELS PROCESSED!")
+        print("="*60)
+    else:
+        # Run single model
+        print("="*60)
+        print(f"🎯 EXTRACT EMBEDDINGS - Model: {args.model.upper()}")
+        print("="*60)
+        
+        # Load model
+        feature_extractor, model, _ = load_model(args.model)
+        
+        # Extract embeddings
+        embeddings = extract_all_embeddings(train_audios, feature_extractor, model)
+        
+        # Save
+        emb_file, label_file = save_embeddings(embeddings, train_labels, args.model)
+        
+        print("\n" + "="*60)
+        print("✅ EMBEDDING EXTRACTION DONE!")
+        print("="*60)
 
 if __name__ == "__main__":
     main()
