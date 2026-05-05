@@ -1,9 +1,9 @@
 
 """
 Speaker Identification Streamlit Application
-Ứng dụng Streamlit để nhận dạng người nói bằng cách so sánh embedding âm thanh với FAISS vector database.
-Sử dụng pre-trained speech models (WavLM, Wav2Vec2, HuBERT, UniSpeech-SAT) để trích xuất embeddings
-và FAISS để tìm người nói tương tự nhất trong cơ sở dữ liệu huấn luyện.
+Ứng dụng Streamlit để nhận dạng người nói bằng hai phương pháp:
+1. Embedding-based: Sử dụng pre-trained speech models (WavLM, Wav2Vec2, HuBERT, UniSpeech-SAT) + FAISS
+2. Image-based: Sử dụng CNN (EfficientNet-B0) trên Spectrogram images
 """
 
 import streamlit as st
@@ -14,6 +14,13 @@ import librosa
 import faiss
 import torch
 from transformers import AutoFeatureExtractor, AutoModel
+import sys
+import tempfile
+import time
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from infer_image_classifier import ImageClassifierInference, audio_to_spectrogram_image
 
 st.set_page_config(page_title="Speaker Identification Monitor", layout="wide")
 
@@ -32,21 +39,34 @@ print(f"🔍 DATA_PROCESSED_DIR exists: {DATA_PROCESSED_DIR.exists()}")
 # Sidebar configuration
 st.sidebar.header("⚙️ Configuration")
 
+# Model Type Selection (NEW)
+model_type = st.sidebar.radio(
+    "🤖 Select Model Type:",
+    options=["Embedding-based (FAISS)", "Image-based (CNN)"],
+    help="Embedding: Fast & accurate with FAISS search | Image: CNN on spectrograms"
+)
+
 audio_path = st.sidebar.text_input(
     "Audio Folder Path:", 
     value=str(DATA_DIR),
     help="Folder containing test audio files (.wav, .mp3, .ogg, .flac)"
 )
 
-models_available = ["wavlm", "wav2vec2", "hubert", "unispeech"]
-selected_model = st.sidebar.selectbox("Select Model:", models_available, index=0)
+# Conditional model selection based on type
+if "Embedding" in model_type:
+    models_available = ["wavlm", "wav2vec2", "hubert", "unispeech"]
+    selected_model = st.sidebar.selectbox("Select Embedding Model:", models_available, index=0)
+else:
+    selected_model = "efficientnet_b0"  # Fixed for image-based
+    st.sidebar.info("📊 Model: **EfficientNet-B0**\nTrained on spectrogram images")
 
 # Model mappings
 MODEL_NAMES = {
     "wavlm": "microsoft/wavlm-base",
     "wav2vec2": "facebook/wav2vec2-base",
     "hubert": "facebook/hubert-base-ls960",
-    "unispeech": "microsoft/unispeech-sat-base"
+    "unispeech": "microsoft/unispeech-sat-base",
+    "efficientnet_b0": "EfficientNet-B0 CNN"
 }
 
 # Speaker ID to Name mapping
@@ -62,6 +82,7 @@ SPEAKER_NAMES = [
     "Xuan_Son"
 ]
 
+# ========================= EMBEDDING-BASED (FAISS) =========================
 # Load FAISS database and models
 @st.cache_resource
 def load_faiss_and_model(model_key):
@@ -76,7 +97,7 @@ def load_faiss_and_model(model_key):
     
     try:
         # Resolve paths inside function to avoid cache issues
-        data_dir = (Path(__file__).parent.parent / "data_processed").resolve()
+        data_dir = Path("D:\\Master DS\\Intro_to_DS\\data_processed").resolve()
         
         # Load FAISS index
         faiss_file = data_dir / f"faiss_{model_key}.index"
@@ -186,6 +207,48 @@ def classify_audio(embedding, model_data):
         st.error(f"Error in classification: {str(e)}")
         return None, None, 0.0
 
+# ========================= IMAGE-BASED (CNN) =========================
+# Load Image Classifier model
+@st.cache_resource
+def load_image_classifier():
+    """Load EfficientNet-B0 image classifier"""
+    try:
+        classifier = ImageClassifierInference()
+        return {"classifier": classifier, "error": None}
+    except Exception as e:
+        return {"classifier": None, "error": f"Failed to load image classifier: {str(e)}"}
+
+# Count actual spectrogram images
+@st.cache_data
+def count_spectrogram_images():
+    """Count actual spectrogram images in data_spectrograms folder"""
+    data_dir = Path("D:\\Master DS\\Intro_to_DS\\data_spectrograms")
+    
+    counts = {"train": 0, "val": 0, "test": 0}
+    
+    for split in ["train", "val", "test"]:
+        split_dir = data_dir / split
+        if split_dir.exists():
+            for speaker_dir in split_dir.iterdir():
+                if speaker_dir.is_dir():
+                    png_files = list(speaker_dir.glob("*.png"))
+                    counts[split] += len(png_files)
+    
+    return counts
+
+# Classify audio using image-based model
+def classify_audio_image(audio_path, classifier):
+    """Classify audio using image-based CNN model"""
+    try:
+        speaker_id, speaker_name, confidence = classifier.predict_from_audio(audio_path)
+        if speaker_id is not None:
+            print(f"🎤 Found (Image): ID={speaker_id}, Speaker={speaker_name}, Confidence={confidence:.4f}")
+            return speaker_id, speaker_name, float(confidence)
+        return None, None, 0.0
+    except Exception as e:
+        st.error(f"Error in image classification: {str(e)}")
+        return None, None, 0.0
+
 # Main interface
 col1, col2, col3 = st.columns([1, 1, 1.2])
 
@@ -209,41 +272,59 @@ with col1:
 with col2:
     st.subheader("🔍 Classification Results")
     
-    # Load model
-    model_data = load_faiss_and_model(selected_model)
+    # Load appropriate model based on type
+    if "Embedding" in model_type:
+        model_data = load_faiss_and_model(selected_model)
+        model_ready = model_data["model"] is not None and model_data["index"] is not None
+        model_error = model_data["error"]
+    else:
+        model_data = load_image_classifier()
+        model_ready = model_data["classifier"] is not None
+        model_error = model_data["error"]
     
-    if model_data["error"]:
-        st.error(f"❌ {model_data['error']}")
-    elif selected_file and model_data["model"] is not None:
+    if model_error:
+        st.error(f"❌ {model_error}")
+    elif selected_file and model_ready:
         if st.button("🎯 Identify Speaker", key="classify_btn"):
             with st.spinner("Processing audio..."):
-                embedding = extract_embedding(audio_file_path, model_data)
+                start_time = time.time()
                 
-                if embedding is not None:
-                    speaker_id, speaker_name, confidence = classify_audio(embedding, model_data)
+                if "Embedding" in model_type:
+                    # Embedding-based classification
+                    embedding = extract_embedding(audio_file_path, model_data)
+                    if embedding is not None:
+                        speaker_id, speaker_name, confidence = classify_audio(embedding, model_data)
+                else:
+                    # Image-based classification
+                    speaker_id, speaker_name, confidence = classify_audio_image(audio_file_path, model_data["classifier"])
+                
+                elapsed = time.time() - start_time
+                
+                if speaker_id is not None:
+                    # Display results
+                    col_res1, col_res2, col_res3 = st.columns(3)
+                    with col_res1:
+                        st.metric("🔢 ID", f"{speaker_id}")
+                    with col_res2:
+                        st.metric("🏷️ Label", f"{speaker_name}")
+                    with col_res3:
+                        st.metric("✅ Confidence", f"{confidence:.4f}")
                     
-                    if speaker_id is not None:
-                        # Display results
-                        col_res1, col_res2, col_res3 = st.columns(3)
-                        with col_res1:
-                            st.metric("🔢 ID", f"{speaker_id}")
-                        with col_res2:
-                            st.metric("🏷️ Label", f"{speaker_name}")
-                        with col_res3:
-                            st.metric("✅ Confidence", f"{confidence:.4f}")
-                        
-                        # Show summary
-                        st.divider()
-                        summary = f"""
+                    # Show summary
+                    st.divider()
+                    model_type_display = "Embedding (FAISS)" if "Embedding" in model_type else "Image-based (CNN)"
+                    summary = f"""
 ### 📋 **SUMMARY**
 
+**Model Type:** {model_type_display}  
 **Model Used:** {selected_model.upper()}  
 **Output:** ID: {speaker_id} | Label: **{speaker_name}**  
-**Accuracy (Confidence Score):** {confidence:.4f}
+**Confidence Score:** {confidence:.4f}  
+**Processing Time:** {elapsed:.2f}s
 """
-                        st.markdown(summary)
-                    else:
-                        st.error("❌ Failed to classify audio")
+                    st.markdown(summary)
+                else:
+                    st.error("❌ Failed to classify audio")
     else:
         if not selected_file:
             st.info("👆 Select an audio file first")
@@ -278,16 +359,28 @@ with col3:
 
 # Sidebar: Database info
 st.sidebar.divider()
-st.sidebar.subheader("📊 Database Info")
+st.sidebar.subheader("📊 Model Info")
 
-if (model_data := load_faiss_and_model(selected_model)):
-    if model_data["labels"] is not None:
-        st.sidebar.metric("📈 Total Training Samples", len(model_data["labels"]))
-        st.sidebar.metric("🗣️ Unique Speakers", len(SPEAKER_NAMES))
-        st.sidebar.metric("🧠 Embedding Dimension", 768)
-        st.sidebar.info(f"**Model**: {MODEL_NAMES[selected_model]}")
-        st.sidebar.info(f"**Index Type**: IndexFlatIP (Inner Product)")
+if "Embedding" in model_type:
+    # Embedding-based info
+    if (model_data := load_faiss_and_model(selected_model)):
+        if model_data["labels"] is not None:
+            st.sidebar.metric("📈 Training Samples", len(model_data["labels"]))
+            st.sidebar.metric("🗣️ Speakers", len(SPEAKER_NAMES))
+            st.sidebar.metric("🧠 Embedding Dim", 768)
+            st.sidebar.info(f"**Architecture**: Speech Embedding + FAISS")
+            st.sidebar.info(f"**Model**: {MODEL_NAMES[selected_model]}")
+else:
+    # Image-based info
+    spec_counts = count_spectrogram_images()
+    st.sidebar.metric("📊 Training Samples", f"{spec_counts['train']:,}")
+    st.sidebar.metric("📊 Val Samples", f"{spec_counts['val']:,}")
+    st.sidebar.metric("📊 Test Samples", f"{spec_counts['test']:,}")
+    st.sidebar.metric("🗣️ Speakers", len(SPEAKER_NAMES))
+    st.sidebar.metric("🖼️ Input Size", "224×224")
+    st.sidebar.info(f"**Architecture**: EfficientNet-B0 CNN")
+    st.sidebar.info(f"**Input**: Spectrogram images")
 
 # Footer
 st.sidebar.divider()
-st.sidebar.caption("🎙️ Speaker Identification System | Powered by WavLM, FAISS & Streamlit")
+st.sidebar.caption("🎙️ Speaker Identification System | Embedding + Image-based Models")
