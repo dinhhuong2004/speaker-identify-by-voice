@@ -1,9 +1,37 @@
-datasets==2.19.0
+# Deep Learning & PyTorch
+torch==2.7.1
+torchvision==0.22.1
+tensorflow==2.13.1
+
+# Audio Processing
 librosa==0.10.1
 soundfile==0.12.1
+audioread==3.1.0
+
+# Data & ML
 numpy==1.26.4
+scipy==1.13.1
 scikit-learn==1.4.2
-torch==2.0.1
+pandas==2.3.3
+datasets==2.19.0
+
+# NLP & Transformers
 transformers==4.41.0
+huggingface_hub==0.36.2
+tokenizers==0.19.1
+
+# Search & Similarity
 faiss-cpu==1.7.4
-streamlit==1.24.0
+
+# Web UI
+streamlit==1.50.0
+
+# Image Processing
+opencv-python==4.13.0.92
+Pillow==11.3.0
+
+# Utils
+tqdm==4.67.3
+matplotlib==3.9.4
+jupyter==1.0.0
+ipykernel==6.31.0
