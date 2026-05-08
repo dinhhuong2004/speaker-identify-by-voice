@@ -1,4 +1,3 @@
-
 """
 Speaker Identification Streamlit Application
 Ứng dụng Streamlit để nhận dạng người nói bằng hai phương pháp:
@@ -32,9 +31,14 @@ DATA_DIR = Path("D:\\Master DS\\Intro_to_DS\\src\\data_test").resolve()
 DATA_PROCESSED_DIR = (APP_DIR.parent / "data_processed").resolve()  # Absolute path
 
 # Debug: Show paths
-print(f"🔍 APP_DIR: {APP_DIR}")
-print(f"🔍 DATA_PROCESSED_DIR: {DATA_PROCESSED_DIR}")
-print(f"🔍 DATA_PROCESSED_DIR exists: {DATA_PROCESSED_DIR.exists()}")
+unique_debug_messages = {
+    "APP_DIR": f"🔍 APP_DIR: {APP_DIR}",
+    "DATA_PROCESSED_DIR": f"🔍 DATA_PROCESSED_DIR: {DATA_PROCESSED_DIR}",
+    "DATA_PROCESSED_DIR_EXISTS": f"🔍 DATA_PROCESSED_DIR exists: {DATA_PROCESSED_DIR.exists()}"
+}
+
+for message in unique_debug_messages.values():
+    print(message)
 
 # Sidebar configuration
 st.sidebar.header("⚙️ Configuration")
